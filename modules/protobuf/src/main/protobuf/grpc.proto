@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package otel.showcase;
+
+message WeatherRequest {
+  string location = 1;
+  string origin = 2;
+}
+
+message WeatherResponse {
+  string forecast = 1;
+}
+
+service Weather {
+  rpc CheckWeather (WeatherRequest) returns (WeatherResponse) {}
+}

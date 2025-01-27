@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package otel.showcase;
+
+message WeatherRequestMessage {
+  string location = 1;
+  string origin = 2;
+}
+
+message WeatherResponseMessage {
+  string location = 1;
+  string origin = 2;
+}
