@@ -5,6 +5,7 @@ import doobie.Transactor
 import doobie.implicits.*
 import fs2.kafka.*
 import fs2.kafka.consumer.KafkaConsumeChunk.CommitNow
+import org.slf4j.LoggerFactory
 import org.typelevel.otel4s.context.LocalProvider
 import org.typelevel.otel4s.context.propagation.TextMapGetter
 import org.typelevel.otel4s.oteljava.OtelJava
@@ -16,6 +17,8 @@ import otel.showcase.kafka.WeatherRequestMessage
 import scala.util.chaining.*
 
 object Server extends IOApp.Simple {
+
+  private val logger = LoggerFactory.getLogger(getClass)
 
   def run: IO[Unit] = {
     given LocalProvider[IO, Context] = IOLocalContextStorage.localProvider[IO]
@@ -45,6 +48,8 @@ object Server extends IOApp.Simple {
             INSERT INTO weather_request (location, origin)
                                  VALUES (${message.location}, ${message.origin});
            """
+
+      logger.info(s"Writing $message into the database")
 
       insert.update.run.transact(transactor).void
     }

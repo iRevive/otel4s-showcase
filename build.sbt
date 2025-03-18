@@ -43,6 +43,8 @@ lazy val Libraries = new {
     "com.softwaremill.sttp.client3" %% "opentelemetry-metrics-backend" % "3.10.2"
   )
 
+  val logback = "ch.qos.logback" % "logback-classic" % "1.5.6"
+
   val openTelemetry = Seq(
     "io.opentelemetry" % "opentelemetry-exporter-otlp"               % "1.46.0" % Runtime,
     "io.opentelemetry" % "opentelemetry-sdk-extension-autoconfigure" % "1.46.0" % Runtime
@@ -76,7 +78,8 @@ lazy val gateway = project
     libraryDependencies ++= Seq(
       Libraries.catsCore,
       Libraries.catsEffect,
-      Libraries.grpcNettyShaded
+      Libraries.grpcNettyShaded,
+      Libraries.logback
     ) ++ Libraries.otel4s ++ Libraries.http4s ++ Libraries.openTelemetry
   )
   .dependsOn(protobuf)
@@ -95,7 +98,8 @@ lazy val `weather-service` = project
       Libraries.catsCore,
       Libraries.catsEffect,
       Libraries.kafka4s,
-      Libraries.grpcNettyShaded
+      Libraries.grpcNettyShaded,
+      Libraries.logback
     ) ++ Libraries.otel4s ++ Libraries.sttp ++ Libraries.openTelemetry
   )
   .dependsOn(protobuf)
@@ -113,7 +117,8 @@ lazy val warehouse = project
     libraryDependencies ++= Seq(
       Libraries.catsCore,
       Libraries.catsEffect,
-      Libraries.kafka4s
+      Libraries.kafka4s,
+      Libraries.logback
     ) ++ Libraries.otel4s ++ Libraries.doobie ++ Libraries.openTelemetry
   )
   .dependsOn(protobuf)

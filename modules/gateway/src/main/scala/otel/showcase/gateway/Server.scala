@@ -10,6 +10,7 @@ import org.http4s.{Headers, HttpApp, HttpRoutes, Request, Response}
 import org.http4s.dsl.io.*
 import org.http4s.ember.server.EmberServerBuilder
 import org.typelevel.ci.CIString
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.otel4s.context.LocalProvider
 import org.typelevel.otel4s.context.propagation.{TextMapGetter, TextMapUpdater}
 import org.typelevel.otel4s.oteljava.OtelJava
@@ -19,6 +20,8 @@ import org.typelevel.otel4s.trace.{SpanKind, Tracer, TracerProvider}
 import otel.showcase.grpc.{WeatherFs2Grpc, WeatherRequest}
 
 object Server extends IOApp.Simple {
+
+  private val logger = Slf4jLogger.getLogger[IO]
 
   def run: IO[Unit] = {
     given LocalProvider[IO, Context] = IOLocalContextStorage.localProvider[IO]
@@ -33,7 +36,7 @@ object Server extends IOApp.Simple {
 
       httpApp <- Resource.eval(tracingMiddleware(routes(weatherGrpc).orNotFound))
       server  <- startHttpSever(httpApp)
-      _       <- Resource.eval(IO.println(s"Bound server at ${server.address}"))
+      _       <- Resource.eval(logger.info(s"Bound server at ${server.address}"))
     } yield ()
   }.useForever
 
@@ -68,10 +71,10 @@ object Server extends IOApp.Simple {
     HttpRoutes.of {
       case req @ GET -> Root / "weather" / location =>
         val request = WeatherRequest(location, req.from.map(_.toString).getOrElse("unknown"))
-        println("req: " + request)
 
         Tracer[IO].span("gRPC: checkWeather").surround {
           for {
+            _            <- logger.info(s"Request: $request")
             metadata     <- Tracer[IO].propagate(new Metadata())
             grpcResponse <- weatherGrpc.checkWeather(request, metadata)
           } yield Response().withEntity(grpcResponse.forecast)

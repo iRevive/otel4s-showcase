@@ -3,6 +3,7 @@ package otel.showcase.weather
 import cats.effect.IO
 import fs2.kafka.{Headers, KafkaProducer, ProducerRecord}
 import io.grpc.Metadata
+import org.slf4j.LoggerFactory
 import org.typelevel.otel4s.Attribute
 import org.typelevel.otel4s.context.propagation.{TextMapGetter, TextMapUpdater}
 import org.typelevel.otel4s.trace.Tracer
@@ -18,10 +19,12 @@ class WeatherService(
 )(using Tracer[IO]) extends WeatherFs2Grpc[IO, Metadata] {
   import WeatherService.given
 
+  private val logger = LoggerFactory.getLogger(getClass)
+
   def checkWeather(request: WeatherRequest, ctx: Metadata): IO[WeatherResponse] =
     Tracer[IO].joinOrRoot(ctx) {
       Tracer[IO].span("checkWeather").use { span =>
-        println("check forecast: " + request + " ctx: " + ctx + " " + span)
+        logger.info(s"Checking forecast for ${request.location}")
         notifyWarehouse(request.location, request.origin) &> checkForecast(request)
       }
     }
