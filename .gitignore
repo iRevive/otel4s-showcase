@@ -45,3 +45,4 @@ build/
 
 ### Scala ###
 .bsp/
+.scala-build/

@@ -9,12 +9,12 @@ import org.typelevel.otel4s.context.propagation.{TextMapGetter, TextMapUpdater}
 import org.typelevel.otel4s.trace.Tracer
 import otel.showcase.grpc.*
 import otel.showcase.kafka.*
-import sttp.client3.*
+import sttp.client4.*
 
 import scala.jdk.CollectionConverters.*
 
 class WeatherService(
-    backend: SttpBackend[IO, Any],
+    backend: Backend[IO],
     producer: KafkaProducer[IO, String, Array[Byte]]
 )(using Tracer[IO]) extends WeatherFs2Grpc[IO, Metadata] {
   import WeatherService.given
@@ -23,7 +23,7 @@ class WeatherService(
 
   def checkWeather(request: WeatherRequest, ctx: Metadata): IO[WeatherResponse] =
     Tracer[IO].joinOrRoot(ctx) {
-      Tracer[IO].span("checkWeather").use { span =>
+      Tracer[IO].span("checkWeather").use { _ =>
         logger.info(s"Checking forecast for ${request.location}")
         notifyWarehouse(request.location, request.origin) &> checkForecast(request)
       }

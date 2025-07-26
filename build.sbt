@@ -1,53 +1,58 @@
 ThisBuild / version      := "0.1.0-SNAPSHOT"
-ThisBuild / scalaVersion := "3.6.4"
+ThisBuild / scalaVersion := "3.7.1"
 
 ThisBuild / tpolecatOptionsMode := org.typelevel.sbt.tpolecat.DevMode
 
-// todo: can be removed
+// todo: can be removed once agent is published publicly
 ThisBuild / resolvers          += Resolver.publishMavenLocal
 ThisBuild / evictionErrorLevel := Level.Info
 
 ThisBuild / semanticdbEnabled := true
-ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 
 lazy val Libraries = new {
   val catsCore   = "org.typelevel"   %% "cats-core"   % "2.13.0"
-  val catsEffect = "org.typelevel"   %% "cats-effect" % "3.5.7"
-  val kafka4s    = "com.github.fd4s" %% "fs2-kafka"   % "3.6.0"
+  val catsEffect = "org.typelevel"   %% "cats-effect" % "3.6.3"
+  val kafka4s    = "com.github.fd4s" %% "fs2-kafka"   % "3.8.0"
 
   val grpcNettyShaded = "io.grpc" % "grpc-netty-shaded" % scalapb.compiler.Version.grpcJavaVersion
 
+  val fs2 = Seq(
+    "co.fs2" %% "fs2-core" % "3.12.0",
+    "co.fs2" %% "fs2-io"   % "3.12.0"
+  )
+
   val otel4s = Seq(
-    "org.typelevel"  %% "otel4s-semconv"                  % "0.12.0-RC3",
-    "org.typelevel"  %% "otel4s-semconv-experimental"     % "0.12.0-RC3",
-    "org.typelevel"  %% "otel4s-oteljava"                 % "0.12.0-RC3",
-    ("org.typelevel" %% "otel4s-oteljava-context-storage" % "0.12-c1f8659-20250318T090939Z-SNAPSHOT").excludeAll(
-      "org.typelevel"
-    )
+    "org.typelevel" %% "otel4s-oteljava"                 % "0.13.1",
+    "org.typelevel" %% "otel4s-oteljava-context-storage" % "0.13.1",
+    "org.typelevel" %% "otel4s-semconv"                  % "0.13.1",
+    "org.typelevel" %% "otel4s-semconv-experimental"     % "0.13.1",
+    "org.typelevel" %% "otel4s-instrumentation-metrics"  % "0.13.1"
   )
 
   val doobie = Seq(
-    "org.tpolecat" %% "doobie-core"     % "1.0.0-RC5",
-    "org.tpolecat" %% "doobie-postgres" % "1.0.0-RC5"
+    "org.tpolecat" %% "doobie-core"     % "1.0.0-RC10",
+    "org.tpolecat" %% "doobie-postgres" % "1.0.0-RC10"
   )
 
   val http4s = Seq(
     "org.http4s" %% "http4s-ember-server" % "0.23.30",
+    "org.http4s" %% "http4s-ember-client" % "0.23.30",
     "org.http4s" %% "http4s-dsl"          % "0.23.30"
   )
 
   val sttp = Seq(
-    "com.softwaremill.sttp.client3" %% "core"                          % "3.10.2",
-    "com.softwaremill.sttp.client3" %% "cats"                          % "3.10.2",
-    "com.softwaremill.sttp.client3" %% "circe"                         % "3.10.2",
-    "com.softwaremill.sttp.client3" %% "opentelemetry-metrics-backend" % "3.10.2"
+    "com.softwaremill.sttp.client4" %% "core"                                 % "4.0.9",
+    "com.softwaremill.sttp.client4" %% "cats"                                 % "4.0.9",
+    "com.softwaremill.sttp.client4" %% "circe"                                % "4.0.9",
+    "com.softwaremill.sttp.client4" %% "opentelemetry-otel4s-metrics-backend" % "4.0.9",
+    "com.softwaremill.sttp.client4" %% "opentelemetry-otel4s-tracing-backend" % "4.0.9"
   )
 
-  val logback = "ch.qos.logback" % "logback-classic" % "1.5.6"
+  val logback = "ch.qos.logback" % "logback-classic" % "1.5.18"
 
   val openTelemetry = Seq(
-    "io.opentelemetry" % "opentelemetry-exporter-otlp"               % "1.46.0" % Runtime,
-    "io.opentelemetry" % "opentelemetry-sdk-extension-autoconfigure" % "1.46.0" % Runtime
+    "io.opentelemetry" % "opentelemetry-exporter-otlp"               % "1.52.0" % Runtime,
+    "io.opentelemetry" % "opentelemetry-sdk-extension-autoconfigure" % "1.52.0" % Runtime
   )
 
   val openTelemetryAgent =
@@ -64,6 +69,10 @@ lazy val root = project
 lazy val protobuf = project
   .in(file("modules/protobuf"))
   .enablePlugins(Fs2Grpc)
+  .settings(
+    scalapbCodeGeneratorOptions += CodeGeneratorOption.Scala3Sources,
+    scalacOptions += "-Wconf:src=.*/src_managed/.*:s"
+  )
 
 // public gateway
 lazy val gateway = project
@@ -80,7 +89,7 @@ lazy val gateway = project
       Libraries.catsEffect,
       Libraries.grpcNettyShaded,
       Libraries.logback
-    ) ++ Libraries.otel4s ++ Libraries.http4s ++ Libraries.openTelemetry
+    ) ++ Libraries.fs2 ++ Libraries.otel4s ++ Libraries.http4s ++ Libraries.openTelemetry
   )
   .dependsOn(protobuf)
 
@@ -100,7 +109,7 @@ lazy val `weather-service` = project
       Libraries.kafka4s,
       Libraries.grpcNettyShaded,
       Libraries.logback
-    ) ++ Libraries.otel4s ++ Libraries.sttp ++ Libraries.openTelemetry
+    ) ++ Libraries.fs2 ++ Libraries.otel4s ++ Libraries.sttp ++ Libraries.http4s ++ Libraries.openTelemetry
   )
   .dependsOn(protobuf)
 
@@ -119,6 +128,6 @@ lazy val warehouse = project
       Libraries.catsEffect,
       Libraries.kafka4s,
       Libraries.logback
-    ) ++ Libraries.otel4s ++ Libraries.doobie ++ Libraries.openTelemetry
+    ) ++ Libraries.fs2 ++ Libraries.otel4s ++ Libraries.doobie ++ Libraries.openTelemetry
   )
   .dependsOn(protobuf)

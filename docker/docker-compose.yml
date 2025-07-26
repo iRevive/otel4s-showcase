@@ -9,7 +9,6 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.3.1
-    restart: always
     ports:
       - "9092:9092"
       - "29092:29092"

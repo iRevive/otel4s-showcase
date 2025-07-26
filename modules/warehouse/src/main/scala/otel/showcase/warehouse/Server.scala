@@ -8,6 +8,8 @@ import fs2.kafka.consumer.KafkaConsumeChunk.CommitNow
 import org.slf4j.LoggerFactory
 import org.typelevel.otel4s.context.LocalProvider
 import org.typelevel.otel4s.context.propagation.TextMapGetter
+import org.typelevel.otel4s.instrumentation.ce.IORuntimeMetrics
+import org.typelevel.otel4s.metrics.MeterProvider
 import org.typelevel.otel4s.oteljava.OtelJava
 import org.typelevel.otel4s.oteljava.context.{Context, IOLocalContextStorage}
 import org.typelevel.otel4s.semconv.experimental.attributes.MessagingExperimentalAttributes
@@ -25,8 +27,11 @@ object Server extends IOApp.Simple {
 
     for {
       otel4s                   <- Resource.eval(OtelJava.global[IO])
+      given MeterProvider[IO]  <- Resource.pure(otel4s.meterProvider)
       given TracerProvider[IO] <- Resource.pure(otel4s.tracerProvider)
 
+      _ <- IORuntimeMetrics.register[IO](runtime.metrics, IORuntimeMetrics.Config.default)
+      
       transactor <- Resource.pure(createTransactor)
       _          <- Resource.eval(createTables(transactor))
       _          <- Resource.eval(startKafkaConsumer(transactor))

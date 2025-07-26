@@ -13,6 +13,8 @@ import org.typelevel.ci.CIString
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.otel4s.context.LocalProvider
 import org.typelevel.otel4s.context.propagation.{TextMapGetter, TextMapUpdater}
+import org.typelevel.otel4s.instrumentation.ce.IORuntimeMetrics
+import org.typelevel.otel4s.metrics.MeterProvider
 import org.typelevel.otel4s.oteljava.OtelJava
 import org.typelevel.otel4s.oteljava.context.{Context, IOLocalContextStorage}
 import org.typelevel.otel4s.semconv.attributes.HttpAttributes
@@ -28,8 +30,11 @@ object Server extends IOApp.Simple {
 
     for {
       otel4s                   <- Resource.eval(OtelJava.global[IO])
+      given MeterProvider[IO]  <- Resource.pure(otel4s.meterProvider)
       given TracerProvider[IO] <- Resource.pure(otel4s.tracerProvider)
       given Tracer[IO]         <- Resource.eval(TracerProvider[IO].get("otel.showcase.gateway"))
+
+      _ <- IORuntimeMetrics.register[IO](runtime.metrics, IORuntimeMetrics.Config.default)
 
       grpcChannel <- buildGrpcChannel
       weatherGrpc <- WeatherFs2Grpc.stubResource[IO](grpcChannel)
