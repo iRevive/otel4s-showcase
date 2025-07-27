@@ -3,10 +3,6 @@ ThisBuild / scalaVersion := "3.7.1"
 
 ThisBuild / tpolecatOptionsMode := org.typelevel.sbt.tpolecat.DevMode
 
-// todo: can be removed once agent is published publicly
-ThisBuild / resolvers          += Resolver.publishMavenLocal
-ThisBuild / evictionErrorLevel := Level.Info
-
 ThisBuild / semanticdbEnabled := true
 
 lazy val Libraries = new {
@@ -56,7 +52,7 @@ lazy val Libraries = new {
   )
 
   val openTelemetryAgent =
-    "io.opentelemetry.javaagent" % "opentelemetry-javaagent" % "2.15.0-SNAPSHOT" % Runtime
+    "io.github.irevive" % "otel4s-opentelemetry-javaagent" % "0.0.1" % Runtime
 }
 
 lazy val root = project
@@ -84,6 +80,7 @@ lazy val gateway = project
     javaOptions += "-Dotel.service.name=gateway",
     javaOptions += "-Dcats.effect.trackFiberContext=true",
     javaAgents  += Libraries.openTelemetryAgent,
+    libraryDependencies += "com.squareup.okhttp3" % "okhttp-jvm" % "5.1.0" % Runtime,
     libraryDependencies ++= Seq(
       Libraries.catsCore,
       Libraries.catsEffect,
@@ -103,6 +100,7 @@ lazy val `weather-service` = project
     javaOptions += "-Dotel.service.name=weather-service",
     javaOptions += "-Dcats.effect.trackFiberContext=true",
     javaAgents  += Libraries.openTelemetryAgent,
+    libraryDependencies += "com.squareup.okhttp3" % "okhttp-jvm" % "5.1.0" % Runtime,
     libraryDependencies ++= Seq(
       Libraries.catsCore,
       Libraries.catsEffect,
@@ -123,6 +121,7 @@ lazy val warehouse = project
     javaOptions += "-Dotel.service.name=warehouse",
     javaOptions += "-Dcats.effect.trackFiberContext=true",
     javaAgents  += Libraries.openTelemetryAgent,
+    libraryDependencies += "com.squareup.okhttp3" % "okhttp-jvm" % "5.1.0" % Runtime,
     libraryDependencies ++= Seq(
       Libraries.catsCore,
       Libraries.catsEffect,

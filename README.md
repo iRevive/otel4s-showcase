@@ -1,9 +1,11 @@
 # otel4s-showcase 
 
 > [!WARNING]
-> The project relies on **unreleased** functionality, hence you cannot use it just yet.
+> The project relies on the **experimental** 
+> [otel4s-opentelemetry-java](https://github.com/iRevive/otel4s-opentelemetry-java) distribution of the 
+> [OpenTelemetry Java Agent](https://opentelemetry.io/docs/zero-code/java/agent/).
 
-The project utilizes [otel4s](https://typelevel.org/otel4s/) and [OpenTelemetry Java Agent](https://opentelemetry.io/docs/zero-code/java/agent/) 
+The project utilizes [otel4s](https://typelevel.org/otel4s/) and customized [OpenTelemetry Java Agent](https://opentelemetry.io/docs/zero-code/java/agent/) 
 to implement end-to-end tracing.
 
 [Grafana OTeL LGTM](https://github.com/grafana/docker-otel-lgtm) collects metrics and traces. 
