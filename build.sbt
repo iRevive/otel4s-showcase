@@ -1,3 +1,5 @@
+import com.lightbend.sbt.javaagent.Modules
+
 ThisBuild / version      := "0.1.0-SNAPSHOT"
 ThisBuild / scalaVersion := "3.7.1"
 
@@ -53,7 +55,41 @@ lazy val Libraries = new {
 
   val openTelemetryAgent =
     "io.github.irevive" % "otel4s-opentelemetry-javaagent" % "0.0.1" % Runtime
+
+  val pyroscopeOtelAgentExtension =
+    "io.pyroscope" % "otel" % "1.0.4" % Runtime
 }
+
+ThisBuild / resolvers += Resolver.sonatypeCentralSnapshots
+
+def pyroscopeSettings(serviceName: String) = Def.settings(
+  libraryDependencies += Libraries.pyroscopeOtelAgentExtension,
+  run / envVars ++= {
+    val pyroscopeOtelAgentExtensionPath =
+      update.value
+        .matching(Modules.exactFilter(Libraries.pyroscopeOtelAgentExtension))
+        .headOption
+        .map(jar => jar.absolutePath)
+        .getOrElse(sys.error("Cannot resolve io.pyroscope-otel path"))
+
+    Map(
+      "OTEL_JAVAAGENT_EXTENSIONS"               -> pyroscopeOtelAgentExtensionPath,
+      "OTEL_PYROSCOPE_ROOT_SPAN_ONLY"           -> "true",
+      "OTEL_PYROSCOPE_ADD_SPAN_NAME"            -> "true",
+      "OTEL_PYROSCOPE_START_PROFILING"          -> "true",
+      "OTEL_PYROSCOPE_SPAN_PROFILE_URL"         -> "false",
+      "OTEL_PYROSCOPE_ADD_PROFILE_BASELINE_URL" -> "false",
+      "PYROSCOPE_SERVER_ADDRESS"                -> "http://localhost:4040",
+      "PYROSCOPE_APPLICATION_NAME"              -> serviceName,
+      "PYROSCOPE_FORMAT"                        -> "jfr",
+      "PYROSCOPE_PROFILING_INTERVAL"            -> "10ms",
+      "PYROSCOPE_PROFILER_EVENT"                -> "itimer",
+      "PYROSCOPE_PROFILER_LOCK"                 -> "10ms",
+      "PYROSCOPE_PROFILER_ALLOC"                -> "512k",
+      "PYROSCOPE_UPLOAD_INTERVAL"               -> "15s"
+    )
+  }
+)
 
 lazy val root = project
   .in(file("."))
@@ -74,6 +110,7 @@ lazy val protobuf = project
 lazy val gateway = project
   .enablePlugins(JavaAgent)
   .in(file("modules/gateway"))
+  .settings(pyroscopeSettings("gateway"))
   .settings(
     name        := "gateway",
     run / fork  := true,
@@ -94,6 +131,7 @@ lazy val gateway = project
 lazy val `weather-service` = project
   .enablePlugins(JavaAgent)
   .in(file("modules/weather-service"))
+  .settings(pyroscopeSettings("weather-service"))
   .settings(
     name        := "weather-service",
     run / fork  := true,
@@ -115,6 +153,7 @@ lazy val `weather-service` = project
 lazy val warehouse = project
   .enablePlugins(JavaAgent)
   .in(file("modules/warehouse"))
+  .settings(pyroscopeSettings("warehouse"))
   .settings(
     name        := "warehouse",
     run / fork  := true,

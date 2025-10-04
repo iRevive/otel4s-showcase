@@ -41,8 +41,9 @@ services:
       - "5432:5432"
 
   otel-lgtm:
-    image: grafana/otel-lgtm:latest
+    image: grafana/otel-lgtm:0.11.10
     ports:
       - "3000:3000"
       - "4317:4317"
       - "4318:4318"
+      - "4040:4040" # pyroscope
