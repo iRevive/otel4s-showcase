@@ -5,13 +5,11 @@ import fs2.kafka.{Headers, KafkaProducer, ProducerRecord}
 import io.grpc.Metadata
 import org.slf4j.LoggerFactory
 import org.typelevel.otel4s.Attribute
-import org.typelevel.otel4s.context.propagation.{TextMapGetter, TextMapUpdater}
+import org.typelevel.otel4s.context.propagation.TextMapUpdater
 import org.typelevel.otel4s.trace.Tracer
 import otel.showcase.grpc.*
 import otel.showcase.kafka.*
 import sttp.client4.*
-
-import scala.jdk.CollectionConverters.*
 
 class WeatherService(
     backend: Backend[IO],
@@ -22,12 +20,19 @@ class WeatherService(
   private val logger = LoggerFactory.getLogger(getClass)
 
   def checkWeather(request: WeatherRequest, ctx: Metadata): IO[WeatherResponse] =
-    Tracer[IO].joinOrRoot(ctx) {
-      Tracer[IO].span("checkWeather").use { _ =>
-        logger.info(s"Checking forecast for ${request.location}")
-        notifyWarehouse(request.location, request.origin) &> checkForecast(request)
-      }
+    IO.defer {
+      logger.info(s"Checking forecast for ${request.location}")
+      notifyWarehouse(request.location, request.origin) &> checkForecast(request)
     }
+
+  def streamForecast(request: WeatherRequest, ctx: Metadata): fs2.Stream[IO, WeatherResponse] =
+    fs2.Stream.eval(checkForecast(request))
+
+  def reportObservations(request: fs2.Stream[IO, WeatherRequest], ctx: Metadata): IO[WeatherResponse] =
+    request.evalMap(checkForecast).compile.lastOrError
+
+  def chatWeather(request: fs2.Stream[IO, WeatherRequest], ctx: Metadata): fs2.Stream[IO, WeatherResponse] =
+    request.evalMap(checkForecast)
 
   private def checkForecast(request: WeatherRequest): IO[WeatherResponse] =
     Tracer[IO]
@@ -55,14 +60,6 @@ class WeatherService(
 }
 
 object WeatherService {
-
-  private given TextMapGetter[Metadata] with {
-    def get(carrier: Metadata, key: String): Option[String] =
-      Option(carrier.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER)))
-
-    def keys(carrier: Metadata): Iterable[String] =
-      carrier.keys().asScala
-  }
 
   private given TextMapUpdater[Headers] with {
     def updated(carrier: Headers, key: String, value: String): Headers =
