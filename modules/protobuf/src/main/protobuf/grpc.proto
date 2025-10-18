@@ -12,5 +12,15 @@ message WeatherResponse {
 }
 
 service Weather {
+  // unary request - unary response
   rpc CheckWeather (WeatherRequest) returns (WeatherResponse) {}
+
+  // unary request - server streaming response
+  rpc StreamForecast (WeatherRequest) returns (stream WeatherResponse) {}
+
+  // client streaming request - unary response
+  rpc ReportObservations (stream WeatherRequest) returns (WeatherResponse) {}
+
+  // bidirectional streaming
+  rpc ChatWeather (stream WeatherRequest) returns (stream WeatherResponse) {}
 }
