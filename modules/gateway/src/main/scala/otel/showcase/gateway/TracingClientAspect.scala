@@ -7,6 +7,7 @@ import fs2.Stream
 import fs2.grpc.client.*
 import org.typelevel.otel4s.Attribute
 import org.typelevel.otel4s.context.propagation.TextMapUpdater
+import org.typelevel.otel4s.semconv.experimental.attributes.RpcExperimentalAttributes
 import org.typelevel.otel4s.trace.{SpanKind, Tracer, TracerProvider}
 
 private class TracingClientAspect[F[_]: {MonadCancelThrow, Tracer}] extends ClientAspect[F, F, Metadata] {
@@ -79,7 +80,12 @@ private class TracingClientAspect[F[_]: {MonadCancelThrow, Tracer}] extends Clie
   private def span(descriptor: MethodDescriptor[?, ?], mode: String) =
     Tracer[F]
       .spanBuilder(descriptor.getFullMethodName)
-      .addAttributes(Attribute("mode", mode))
+      .addAttributes(
+        RpcExperimentalAttributes.RpcSystem("grpc"),
+        RpcExperimentalAttributes.RpcMethod(descriptor.getBareMethodName),
+        RpcExperimentalAttributes.RpcService(descriptor.getServiceName),
+        Attribute("mode", mode)
+      )
       .withSpanKind(SpanKind.Client)
       .build
 }
