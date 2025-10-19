@@ -52,10 +52,19 @@ object Server extends IOApp.Simple {
   private def buildWeatherService(
       backend: Backend[IO],
       producer: KafkaProducer[IO, String, Array[Byte]]
-  )(using Tracer[IO]): Resource[IO, ServerServiceDefinition] =
+  )(using Tracer[IO], TracerProvider[IO]): Resource[IO, ServerServiceDefinition] =
     for {
       weatherService <- Resource.pure(new WeatherService(backend, producer))
-      server         <- WeatherFs2Grpc.bindServiceResource[IO](weatherService)
+      dispatcher     <- cats.effect.std.Dispatcher.parallel[IO]
+      aspect         <- Resource.eval(TracingServiceAspect.create[IO])
+      server <- Resource.pure(
+        WeatherFs2Grpc.serviceFull(
+          dispatcher,
+          weatherService,
+          aspect,
+          fs2.grpc.server.ServerOptions.default
+        )
+      )
     } yield server
 
 }

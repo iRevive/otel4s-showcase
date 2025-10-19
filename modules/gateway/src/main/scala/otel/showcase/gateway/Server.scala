@@ -12,7 +12,7 @@ import org.http4s.ember.server.EmberServerBuilder
 import org.typelevel.ci.CIString
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.otel4s.context.LocalProvider
-import org.typelevel.otel4s.context.propagation.{TextMapGetter, TextMapUpdater}
+import org.typelevel.otel4s.context.propagation.TextMapGetter
 import org.typelevel.otel4s.instrumentation.ce.IORuntimeMetrics
 import org.typelevel.otel4s.metrics.MeterProvider
 import org.typelevel.otel4s.oteljava.OtelJava
@@ -38,6 +38,14 @@ object Server extends IOApp.Simple {
 
       grpcChannel <- buildGrpcChannel
       weatherGrpc <- WeatherFs2Grpc.stubResource[IO](grpcChannel)
+      dispatcher  <- cats.effect.std.Dispatcher.parallel[IO]
+      aspect      <- Resource.eval(TracingClientAspect.create[IO])
+      weatherGrpc = WeatherFs2Grpc.mkClientFull[IO, IO, Metadata](
+        dispatcher,
+        grpcChannel,
+        aspect,
+        fs2.grpc.client.ClientOptions.default
+      )
 
       httpApp <- Resource.eval(tracingMiddleware(routes(weatherGrpc).orNotFound))
       server  <- startHttpSever(httpApp)
@@ -80,8 +88,24 @@ object Server extends IOApp.Simple {
         Tracer[IO].span("gRPC: checkWeather").surround {
           for {
             _            <- logger.info(s"Request: $request")
-            metadata     <- Tracer[IO].propagate(new Metadata())
-            grpcResponse <- weatherGrpc.checkWeather(request, metadata)
+            grpcResponse <- weatherGrpc.checkWeather(request, new Metadata())
+
+            _ <- weatherGrpc
+              .chatWeather(fs2.Stream.emit(request), new Metadata())
+              .evalTap(forecast => logger.info(s"chat weather Forecast: $forecast"))
+              .compile
+              .drain
+
+            _ <- weatherGrpc
+              .streamForecast(request, new Metadata())
+              .evalTap(forecast => logger.info(s"stream Forecast: $forecast"))
+              .compile
+              .drain
+
+            _ <- weatherGrpc
+              .reportObservations(fs2.Stream.emits(Seq(request, request)), new Metadata())
+              .flatTap(weather => logger.info(s"report observations $weather"))
+
           } yield Response().withEntity(grpcResponse.forecast)
         }
 
@@ -101,13 +125,6 @@ object Server extends IOApp.Simple {
 
     def keys(carrier: Headers): Iterable[String] =
       carrier.headers.view.map(_.name).distinct.map(_.toString).toSeq
-  }
-
-  private given TextMapUpdater[Metadata] with {
-    def updated(carrier: Metadata, key: String, value: String): Metadata = {
-      carrier.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value)
-      carrier
-    }
   }
 
 }
