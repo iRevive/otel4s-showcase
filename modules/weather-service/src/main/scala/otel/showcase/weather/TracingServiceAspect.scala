@@ -7,6 +7,7 @@ import fs2.Stream
 import fs2.grpc.server.*
 import org.typelevel.otel4s.Attribute
 import org.typelevel.otel4s.context.propagation.TextMapGetter
+import org.typelevel.otel4s.semconv.experimental.attributes.RpcExperimentalAttributes
 import org.typelevel.otel4s.trace.{SpanContext, SpanKind, Tracer, TracerProvider}
 
 import scala.util.chaining.*
@@ -75,7 +76,12 @@ private class TracingServiceAspect[F[_]: {MonadCancelThrow, Tracer}] extends Ser
   private def span(parent: Option[SpanContext], descriptor: MethodDescriptor[?, ?], mode: String) =
     Tracer[F]
       .spanBuilder(descriptor.getFullMethodName)
-      .addAttributes(Attribute("mode", mode))
+      .addAttributes(
+        RpcExperimentalAttributes.RpcSystem("grpc"),
+        RpcExperimentalAttributes.RpcMethod(descriptor.getBareMethodName),
+        RpcExperimentalAttributes.RpcService(descriptor.getServiceName),
+        Attribute("mode", mode)
+      )
       .withSpanKind(SpanKind.Server)
       .pipe(b => parent.fold(b)(b.withParent))
       .build
