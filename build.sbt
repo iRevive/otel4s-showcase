@@ -37,22 +37,22 @@ lazy val Libraries = new {
   )
 
   val sttp = Seq(
-    "com.softwaremill.sttp.client4" %% "core"                                 % "4.0.12",
-    "com.softwaremill.sttp.client4" %% "cats"                                 % "4.0.12",
-    "com.softwaremill.sttp.client4" %% "circe"                                % "4.0.12",
-    "com.softwaremill.sttp.client4" %% "opentelemetry-otel4s-metrics-backend" % "4.0.12",
-    "com.softwaremill.sttp.client4" %% "opentelemetry-otel4s-tracing-backend" % "4.0.12"
+    "com.softwaremill.sttp.client4" %% "core"                                 % "4.0.13",
+    "com.softwaremill.sttp.client4" %% "cats"                                 % "4.0.13",
+    "com.softwaremill.sttp.client4" %% "circe"                                % "4.0.13",
+    "com.softwaremill.sttp.client4" %% "opentelemetry-otel4s-metrics-backend" % "4.0.13",
+    "com.softwaremill.sttp.client4" %% "opentelemetry-otel4s-tracing-backend" % "4.0.13"
   )
 
   val logback = "ch.qos.logback" % "logback-classic" % "1.5.19"
 
   val openTelemetry = Seq(
-    "io.opentelemetry" % "opentelemetry-exporter-otlp"               % "1.55.0" % Runtime,
-    "io.opentelemetry" % "opentelemetry-sdk-extension-autoconfigure" % "1.55.0" % Runtime
+    "io.opentelemetry" % "opentelemetry-exporter-otlp"               % "1.56.0" % Runtime,
+    "io.opentelemetry" % "opentelemetry-sdk-extension-autoconfigure" % "1.56.0" % Runtime
   )
 
   val openTelemetryAgent =
-    "io.github.irevive" % "otel4s-opentelemetry-javaagent" % "0.0.4" % Runtime
+    "io.github.irevive" % "otel4s-opentelemetry-javaagent" % "2.22.0" % Runtime
 }
 
 lazy val root = project
