@@ -17,12 +17,15 @@ class TextMapPropagatorInterceptor extends ConsumerInterceptor[Any, Any] {
 
   private var propagator: TextMapPropagator = uninitialized
 
-  override def onConsume(records: ConsumerRecords[Any, Any]): ConsumerRecords[Any, Any] =
-    records.asScala.foreach: record =>
-      Option(Context.current).map: context =>
+  override def onConsume(records: ConsumerRecords[Any, Any]): ConsumerRecords[Any, Any] = {
+    records.asScala.foreach { record =>
+      Option(Context.current).foreach { context =>
         try propagator.inject(context, record.headers, TextMapPropagatorInterceptor.headerSetter)
         catch case _: Throwable => ()
+      }
+    }
     records
+  }
 
   override def onCommit(offsets: util.Map[TopicPartition, OffsetAndMetadata]): Unit = ()
 
