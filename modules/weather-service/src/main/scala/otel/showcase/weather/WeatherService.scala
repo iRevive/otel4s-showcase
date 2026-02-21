@@ -1,11 +1,11 @@
 package otel.showcase.weather
 
 import cats.effect.IO
-import fs2.kafka.{Headers, KafkaProducer, ProducerRecord}
+import fs2.kafka.{KafkaProducer, ProducerRecord}
 import io.grpc.Metadata
 import org.slf4j.LoggerFactory
 import org.typelevel.otel4s.Attribute
-import org.typelevel.otel4s.context.propagation.{TextMapGetter, TextMapUpdater}
+import org.typelevel.otel4s.context.propagation.TextMapGetter
 import org.typelevel.otel4s.trace.Tracer
 import otel.showcase.grpc.*
 import otel.showcase.kafka.*
@@ -46,10 +46,7 @@ class WeatherService(
         WeatherRequestMessage(location, origin).toByteArray
       )
 
-      for {
-        headers <- Tracer[IO].propagate(Headers.empty)
-        _       <- producer.produceOne_(record.withHeaders(headers))
-      } yield ()
+      producer.produceOne_(record).void
     }
 
 }
@@ -62,11 +59,6 @@ object WeatherService {
 
     def keys(carrier: Metadata): Iterable[String] =
       carrier.keys().asScala
-  }
-
-  private given TextMapUpdater[Headers] with {
-    def updated(carrier: Headers, key: String, value: String): Headers =
-      carrier.append(key, value)
   }
 
 }

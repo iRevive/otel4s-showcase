@@ -5,6 +5,7 @@ import doobie.Transactor
 import doobie.implicits.*
 import fs2.kafka.*
 import fs2.kafka.consumer.KafkaConsumeChunk.CommitNow
+import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.slf4j.LoggerFactory
 import org.typelevel.otel4s.context.LocalProvider
 import org.typelevel.otel4s.context.propagation.TextMapGetter
@@ -31,7 +32,7 @@ object Server extends IOApp.Simple {
       given TracerProvider[IO] <- Resource.pure(otel4s.tracerProvider)
 
       _ <- IORuntimeMetrics.register[IO](runtime.metrics, IORuntimeMetrics.Config.default)
-      
+
       transactor <- Resource.pure(createTransactor)
       _          <- Resource.eval(createTables(transactor))
       _          <- Resource.eval(startKafkaConsumer(transactor))
@@ -44,6 +45,10 @@ object Server extends IOApp.Simple {
         .withAutoOffsetReset(AutoOffsetReset.Earliest)
         .withBootstrapServers("localhost:9092")
         .withGroupId("group")
+        .withProperty(
+          ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG,
+          classOf[TextMapPropagatorInterceptor].getName
+        )
 
     def write(record: ConsumerRecord[String, Array[Byte]]): IO[Unit] = IO.defer {
       val message = WeatherRequestMessage.parseFrom(record.value)
@@ -60,19 +65,7 @@ object Server extends IOApp.Simple {
     }
 
     def handleRecord(record: ConsumerRecord[String, Array[Byte]])(using Tracer[IO]) =
-      Tracer[IO].joinOrRoot(record.headers)(Tracer[IO].currentSpanContext).flatMap { externalCtx =>
-        val spanOps = Tracer[IO]
-          .spanBuilder("kafka.process")
-          .addAttributes(
-            MessagingExperimentalAttributes.MessagingKafkaMessageKey(record.key),
-            MessagingExperimentalAttributes.MessagingKafkaOffset(record.offset)
-          )
-          .pipe(builder => externalCtx.fold(builder)(builder.addLink(_)))
-          .root
-          .build
-
-        spanOps.surround(write(record))
-      }
+      Tracer[IO].joinOrRoot(record.headers)(write(record))
 
     for {
       given Tracer[IO] <- TracerProvider[IO].get("kafka")
