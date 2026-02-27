@@ -26,8 +26,10 @@ lazy val Libraries = new {
   )
 
   val doobie = Seq(
-    "org.tpolecat" %% "doobie-core"     % "1.0.0-RC11",
-    "org.tpolecat" %% "doobie-postgres" % "1.0.0-RC11"
+    "org.tpolecat" %% "doobie-core"                   % "1.0-04cb209-20260227T192754Z-SNAPSHOT",
+    "org.tpolecat" %% "doobie-postgres"               % "1.0-04cb209-20260227T192754Z-SNAPSHOT",
+    "org.tpolecat" %% "doobie-otel4s"                 % "1.0-04cb209-20260227T192754Z-SNAPSHOT",
+    "org.tpolecat" %% "doobie-otel4s-instrumentation" % "1.0-04cb209-20260227T192754Z-SNAPSHOT"
   )
 
   val http4s = Seq(
@@ -118,12 +120,14 @@ lazy val warehouse = project
     run / fork  := true,
     javaOptions += "-Dotel.service.name=warehouse",
     javaOptions += "-Dcats.effect.trackFiberContext=true",
-    javaAgents  += Libraries.openTelemetryAgent,
+    // javaAgents  += Libraries.openTelemetryAgent,
+    run / envVars += "OTEL_SEMCONV_STABILITY_OPT_IN" -> "database,code",
     libraryDependencies ++= Seq(
       Libraries.catsCore,
       Libraries.catsEffect,
       Libraries.kafka4s,
-      Libraries.logback
+      Libraries.logback,
+      "io.opentelemetry.instrumentation" % "opentelemetry-jdbc" % "2.24.0-alpha"
     ) ++ Libraries.fs2 ++ Libraries.otel4s ++ Libraries.doobie ++ Libraries.openTelemetry
   )
   .dependsOn(protobuf)
