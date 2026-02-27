@@ -1,39 +1,43 @@
 package otel.showcase.warehouse
 
+import javax.sql.DataSource
+
 import cats.effect.{IO, IOApp, Resource}
-import doobie.Transactor
 import doobie.implicits.*
+import doobie.otel4s.*
+import doobie.{ExecutionContexts, Transactor}
 import fs2.kafka.*
 import fs2.kafka.consumer.KafkaConsumeChunk.CommitNow
+import io.opentelemetry.api.OpenTelemetry
+import io.opentelemetry.instrumentation.jdbc.datasource.JdbcTelemetry
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.postgresql.ds.PGSimpleDataSource
 import org.slf4j.LoggerFactory
 import org.typelevel.otel4s.context.LocalProvider
 import org.typelevel.otel4s.context.propagation.TextMapGetter
 import org.typelevel.otel4s.instrumentation.ce.IORuntimeMetrics
 import org.typelevel.otel4s.metrics.MeterProvider
 import org.typelevel.otel4s.oteljava.OtelJava
-import org.typelevel.otel4s.oteljava.context.{Context, IOLocalContextStorage}
-import org.typelevel.otel4s.semconv.experimental.attributes.MessagingExperimentalAttributes
+import org.typelevel.otel4s.oteljava.context.{AskContext, Context}
 import org.typelevel.otel4s.trace.{Tracer, TracerProvider}
 import otel.showcase.kafka.WeatherRequestMessage
-
-import scala.util.chaining.*
 
 object Server extends IOApp.Simple {
 
   private val logger = LoggerFactory.getLogger(getClass)
 
   def run: IO[Unit] = {
-    given LocalProvider[IO, Context] = IOLocalContextStorage.localProvider[IO]
+    // given LocalProvider[IO, Context] = IOLocalContextStorage.localProvider[IO]
 
     for {
-      otel4s                   <- Resource.eval(OtelJava.global[IO])
+      otel4s                   <- OtelJava.autoConfigured[IO]()
+      given AskContext[IO]     <- Resource.pure(otel4s.localContext)
       given MeterProvider[IO]  <- Resource.pure(otel4s.meterProvider)
       given TracerProvider[IO] <- Resource.pure(otel4s.tracerProvider)
 
       _ <- IORuntimeMetrics.register[IO](runtime.metrics, IORuntimeMetrics.Config.default)
 
-      transactor <- Resource.pure(createTransactor)
+      transactor <- createTransactor(otel4s.underlying)
       _          <- Resource.eval(createTables(transactor))
       _          <- Resource.eval(startKafkaConsumer(transactor))
     } yield ()
@@ -77,14 +81,25 @@ object Server extends IOApp.Simple {
     } yield ()
   }
 
-  private def createTransactor(using TracerProvider[IO]): Transactor[IO] =
-    Transactor.fromDriverManager[IO](
-      driver = "org.postgresql.Driver",
-      url = "jdbc:postgresql://localhost:5432/warehouse",
-      user = "user",
-      password = "password",
-      logHandler = None
-    )
+  private def createTransactor(openTelemetry: OpenTelemetry)(using AskContext[IO]): Resource[IO, Transactor[IO]] =
+    ExecutionContexts.fixedThreadPool[IO](32).map { ec =>
+      val ds = new PGSimpleDataSource
+      ds.setUrl("jdbc:postgresql://localhost:5432/warehouse")
+      ds.setUser("user")
+      ds.setPassword("password")
+      val normal = Transactor.fromDataSource[IO](ds: DataSource, ec, None)
+
+      val jdbcTelemetry = JdbcTelemetry
+        .builder(openTelemetry)
+        .setDataSourceInstrumenterEnabled(false)
+        .setStatementInstrumenterEnabled(true)
+        .setCaptureQueryParameters(true)
+        .setQuerySanitizationEnabled(true)
+        .setTransactionInstrumenterEnabled(false)
+        .build()
+
+      TracedJdbcTransactor.dataSource(jdbcTelemetry, normal, None)
+    }
 
   private def createTables(tx: Transactor[IO]): IO[Unit] = {
     val ddl =
