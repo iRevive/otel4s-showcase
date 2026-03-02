@@ -5,19 +5,15 @@ import doobie.Transactor
 import doobie.implicits.*
 import fs2.kafka.*
 import fs2.kafka.consumer.KafkaConsumeChunk.CommitNow
-import org.apache.kafka.clients.consumer.ConsumerConfig
+import fs2.kafka.otel4s.Fs2KafkaOtel4s
 import org.slf4j.LoggerFactory
 import org.typelevel.otel4s.context.LocalProvider
-import org.typelevel.otel4s.context.propagation.TextMapGetter
 import org.typelevel.otel4s.instrumentation.ce.IORuntimeMetrics
 import org.typelevel.otel4s.metrics.MeterProvider
 import org.typelevel.otel4s.oteljava.OtelJava
 import org.typelevel.otel4s.oteljava.context.{Context, IOLocalContextStorage}
-import org.typelevel.otel4s.semconv.experimental.attributes.MessagingExperimentalAttributes
 import org.typelevel.otel4s.trace.{Tracer, TracerProvider}
 import otel.showcase.kafka.WeatherRequestMessage
-
-import scala.util.chaining.*
 
 object Server extends IOApp.Simple {
 
@@ -33,22 +29,21 @@ object Server extends IOApp.Simple {
 
       _ <- IORuntimeMetrics.register[IO](runtime.metrics, IORuntimeMetrics.Config.default)
 
-      transactor <- Resource.pure(createTransactor)
+      transactor <- Resource.pure(createTransactor())
       _          <- Resource.eval(createTables(transactor))
-      _          <- Resource.eval(startKafkaConsumer(transactor))
+      _          <- Resource.eval(startKafkaConsumer(otel4s, transactor))
     } yield ()
   }.useForever
 
-  private def startKafkaConsumer(transactor: Transactor[IO])(using TracerProvider[IO]): IO[Unit] = {
+  private def startKafkaConsumer(otelJava: OtelJava[IO], transactor: Transactor[IO])(using
+      TracerProvider[IO]
+  ): IO[Unit] = {
     val consumerSettings =
       ConsumerSettings[IO, String, Array[Byte]]
         .withAutoOffsetReset(AutoOffsetReset.Earliest)
         .withBootstrapServers("localhost:9092")
         .withGroupId("group")
-        .withProperty(
-          ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG,
-          classOf[TextMapPropagatorInterceptor].getName
-        )
+        .withProperties(Fs2KafkaOtel4s.consumerInterceptorProperties(otelJava))
 
     def write(record: ConsumerRecord[String, Array[Byte]]): IO[Unit] = IO.defer {
       val message = WeatherRequestMessage.parseFrom(record.value)
@@ -65,7 +60,7 @@ object Server extends IOApp.Simple {
     }
 
     def handleRecord(record: ConsumerRecord[String, Array[Byte]])(using Tracer[IO]) =
-      Tracer[IO].joinOrRoot(record.headers)(write(record))
+      Fs2KafkaOtel4s.joinOrRoot(record)(write(record))
 
     for {
       given Tracer[IO] <- TracerProvider[IO].get("kafka")
@@ -77,7 +72,7 @@ object Server extends IOApp.Simple {
     } yield ()
   }
 
-  private def createTransactor(using TracerProvider[IO]): Transactor[IO] =
+  private def createTransactor(): Transactor[IO] =
     Transactor.fromDriverManager[IO](
       driver = "org.postgresql.Driver",
       url = "jdbc:postgresql://localhost:5432/warehouse",
@@ -99,13 +94,4 @@ object Server extends IOApp.Simple {
 
     ddl.update.run.transact(tx).void
   }
-
-  private given TextMapGetter[Headers] with {
-    def get(carrier: Headers, key: String): Option[String] =
-      carrier(key).map(_.as[String])
-
-    def keys(carrier: Headers): Iterable[String] =
-      carrier.toChain.map(_.key).toVector
-  }
-
 }
