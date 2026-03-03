@@ -3,6 +3,7 @@ package otel.showcase.weather
 import cats.effect.{IO, IOApp, Resource}
 import fs2.grpc.syntax.all.*
 import fs2.kafka.{KafkaProducer, ProducerSettings}
+import fs2.kafka.otel4s.Fs2KafkaOtel4s
 import io.grpc.{Server, ServerServiceDefinition}
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import org.typelevel.otel4s.context.LocalProvider
@@ -30,7 +31,9 @@ object Server extends IOApp.Simple {
       _ <- IORuntimeMetrics.register[IO](runtime.metrics, IORuntimeMetrics.Config.default)
 
       kafkaProducer <- KafkaProducer.resource(
-        ProducerSettings[IO, String, Array[Byte]].withBootstrapServers("localhost:9092")
+        ProducerSettings[IO, String, Array[Byte]]
+          .withBootstrapServers("localhost:9092")
+          .withProperties(Fs2KafkaOtel4s.producerInterceptorProperties(otel4s))
       )
 
       backend <- HttpClientCatsBackend.resource[IO]()

@@ -60,7 +60,17 @@ lazy val root = project
   .settings(
     name := "otel4s-showcase"
   )
-  .aggregate(gateway, warehouse, `weather-service`, protobuf)
+  .aggregate(gateway, warehouse, `weather-service`, protobuf, `fs2-kafka-otel4s`)
+
+lazy val `fs2-kafka-otel4s` = project
+  .in(file("modules/fs2-kafka-otel4s"))
+  .settings(
+    name := "fs2-kafka-otel4s",
+    libraryDependencies ++= Seq(
+      Libraries.kafka4s,
+      "io.opentelemetry.instrumentation" % "opentelemetry-kafka-clients-2.6" % "2.24.0-alpha"
+    ) ++ Libraries.otel4s
+  )
 
 lazy val protobuf = project
   .in(file("modules/protobuf"))
@@ -98,6 +108,7 @@ lazy val `weather-service` = project
     run / fork  := true,
     javaOptions += "-Dotel.service.name=weather-service",
     javaOptions += "-Dcats.effect.trackFiberContext=true",
+    javaOptions += "-Dotel.instrumentation.kafka.enabled=false",
     javaAgents  += Libraries.openTelemetryAgent,
     libraryDependencies ++= Seq(
       Libraries.catsCore,
@@ -107,7 +118,7 @@ lazy val `weather-service` = project
       Libraries.logback
     ) ++ Libraries.fs2 ++ Libraries.otel4s ++ Libraries.sttp ++ Libraries.http4s ++ Libraries.openTelemetry
   )
-  .dependsOn(protobuf)
+  .dependsOn(protobuf, `fs2-kafka-otel4s`)
 
 // internal request processor
 lazy val warehouse = project
@@ -118,6 +129,7 @@ lazy val warehouse = project
     run / fork  := true,
     javaOptions += "-Dotel.service.name=warehouse",
     javaOptions += "-Dcats.effect.trackFiberContext=true",
+    javaOptions += "-Dotel.instrumentation.kafka.enabled=false",
     javaAgents  += Libraries.openTelemetryAgent,
     libraryDependencies ++= Seq(
       Libraries.catsCore,
@@ -126,4 +138,4 @@ lazy val warehouse = project
       Libraries.logback
     ) ++ Libraries.fs2 ++ Libraries.otel4s ++ Libraries.doobie ++ Libraries.openTelemetry
   )
-  .dependsOn(protobuf)
+  .dependsOn(protobuf, `fs2-kafka-otel4s`)
