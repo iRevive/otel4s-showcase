@@ -1,6 +1,8 @@
 package otel.showcase.weather
 
+import cats.effect.std.Dispatcher
 import cats.effect.{IO, IOApp, Resource}
+import fs2.grpc.otel4s.trace.TraceServiceAspect
 import fs2.grpc.syntax.all.*
 import fs2.kafka.{KafkaProducer, ProducerSettings}
 import io.grpc.{Server, ServerServiceDefinition}
@@ -55,15 +57,13 @@ object Server extends IOApp.Simple {
   )(using Tracer[IO], TracerProvider[IO]): Resource[IO, ServerServiceDefinition] =
     for {
       weatherService <- Resource.pure(new WeatherService(backend, producer))
-      dispatcher     <- cats.effect.std.Dispatcher.parallel[IO]
-      aspect         <- Resource.eval(TracingServiceAspect.create[IO])
-      server <- Resource.pure(
-        WeatherFs2Grpc.serviceFull(
-          dispatcher,
-          weatherService,
-          aspect,
-          fs2.grpc.server.ServerOptions.default
-        )
+      dispatcher     <- Dispatcher.parallel[IO]
+      aspect         <- Resource.eval(TraceServiceAspect.create[IO])
+      server = WeatherFs2Grpc.serviceFull(
+        dispatcher,
+        weatherService,
+        aspect,
+        fs2.grpc.server.ServerOptions.default
       )
     } yield server
 

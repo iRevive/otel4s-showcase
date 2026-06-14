@@ -5,7 +5,6 @@ import fs2.kafka.{KafkaProducer, ProducerRecord}
 import io.grpc.Metadata
 import org.slf4j.LoggerFactory
 import org.typelevel.otel4s.Attribute
-import org.typelevel.otel4s.context.propagation.TextMapGetter
 import org.typelevel.otel4s.trace.Tracer
 import otel.showcase.grpc.*
 import otel.showcase.kafka.*
@@ -15,7 +14,6 @@ class WeatherService(
     backend: Backend[IO],
     producer: KafkaProducer[IO, String, Array[Byte]]
 )(using Tracer[IO]) extends WeatherFs2Grpc[IO, Metadata] {
-  import WeatherService.given
 
   private val logger = LoggerFactory.getLogger(getClass)
 
@@ -24,15 +22,6 @@ class WeatherService(
       logger.info(s"Checking forecast for ${request.location}")
       notifyWarehouse(request.location, request.origin) &> checkForecast(request)
     }
-
-  def streamForecast(request: WeatherRequest, ctx: Metadata): fs2.Stream[IO, WeatherResponse] =
-    fs2.Stream.eval(checkForecast(request))
-
-  def reportObservations(request: fs2.Stream[IO, WeatherRequest], ctx: Metadata): IO[WeatherResponse] =
-    request.evalMap(checkForecast).compile.lastOrError
-
-  def chatWeather(request: fs2.Stream[IO, WeatherRequest], ctx: Metadata): fs2.Stream[IO, WeatherResponse] =
-    request.evalMap(checkForecast)
 
   private def checkForecast(request: WeatherRequest): IO[WeatherResponse] =
     Tracer[IO]
@@ -53,14 +42,5 @@ class WeatherService(
 
       producer.produceOne_(record).void
     }
-
-}
-
-object WeatherService {
-
-  private given TextMapUpdater[Headers] with {
-    def updated(carrier: Headers, key: String, value: String): Headers =
-      carrier.append(key, value)
-  }
 
 }

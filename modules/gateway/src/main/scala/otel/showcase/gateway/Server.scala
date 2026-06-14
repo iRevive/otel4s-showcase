@@ -1,9 +1,12 @@
 package otel.showcase.gateway
 
 import cats.data.Kleisli
+import cats.effect.std.Dispatcher
 import cats.effect.{IO, IOApp, Resource}
 import com.comcast.ip4s.*
+import fs2.grpc.client.ClientOptions
 import fs2.grpc.syntax.all.*
+import fs2.grpc.otel4s.trace.TraceClientAspect
 import io.grpc.{ManagedChannel, Metadata}
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder
 import org.http4s.{Headers, HttpApp, HttpRoutes, Request, Response}
@@ -37,14 +40,13 @@ object Server extends IOApp.Simple {
       _ <- IORuntimeMetrics.register[IO](runtime.metrics, IORuntimeMetrics.Config.default)
 
       grpcChannel <- buildGrpcChannel
-      weatherGrpc <- WeatherFs2Grpc.stubResource[IO](grpcChannel)
-      dispatcher  <- cats.effect.std.Dispatcher.parallel[IO]
-      aspect      <- Resource.eval(TracingClientAspect.create[IO])
+      dispatcher  <- Dispatcher.parallel[IO]
+      aspect      <- Resource.eval(TraceClientAspect.create[IO])
       weatherGrpc = WeatherFs2Grpc.mkClientFull[IO, IO, Metadata](
         dispatcher,
         grpcChannel,
         aspect,
-        fs2.grpc.client.ClientOptions.default
+        ClientOptions.default
       )
 
       httpApp <- Resource.eval(tracingMiddleware(routes(weatherGrpc).orNotFound))
@@ -89,23 +91,6 @@ object Server extends IOApp.Simple {
           for {
             _            <- logger.info(s"Request: $request")
             grpcResponse <- weatherGrpc.checkWeather(request, new Metadata())
-
-            _ <- weatherGrpc
-              .chatWeather(fs2.Stream.emit(request), new Metadata())
-              .evalTap(forecast => logger.info(s"chat weather Forecast: $forecast"))
-              .compile
-              .drain
-
-            _ <- weatherGrpc
-              .streamForecast(request, new Metadata())
-              .evalTap(forecast => logger.info(s"stream Forecast: $forecast"))
-              .compile
-              .drain
-
-            _ <- weatherGrpc
-              .reportObservations(fs2.Stream.emits(Seq(request, request)), new Metadata())
-              .flatTap(weather => logger.info(s"report observations $weather"))
-
           } yield Response().withEntity(grpcResponse.forecast)
         }
 
