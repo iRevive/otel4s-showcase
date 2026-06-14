@@ -40,7 +40,7 @@ class WeatherService(
         WeatherRequestMessage(location, origin).toByteArray
       )
 
-      producer.produceOne_(record).void
+      producer.produceOne_(record).flatten.void
     }
 
 }

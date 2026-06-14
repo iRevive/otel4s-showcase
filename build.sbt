@@ -5,10 +5,11 @@ ThisBuild / tpolecatOptionsMode := org.typelevel.sbt.tpolecat.DevMode
 
 ThisBuild / semanticdbEnabled := true
 
+ThisBuild / resolvers += "central-snapshots".at("https://central.sonatype.com/repository/maven-snapshots/")
+
 lazy val Libraries = new {
-  val catsCore   = "org.typelevel"   %% "cats-core"   % "2.13.0"
-  val catsEffect = "org.typelevel"   %% "cats-effect" % "3.7.0"
-  val kafka4s    = "com.github.fd4s" %% "fs2-kafka"   % "3.9.1"
+  val catsCore   = "org.typelevel" %% "cats-core"   % "2.13.0"
+  val catsEffect = "org.typelevel" %% "cats-effect" % "3.7.0"
 
   val grpcNettyShaded = "io.grpc" % "grpc-netty-shaded" % scalapb.compiler.Version.grpcJavaVersion
 
@@ -19,6 +20,11 @@ lazy val Libraries = new {
 
   val fs2Grpc = Seq(
     "org.typelevel" %% "fs2-grpc-otel4s-trace" % "3.1.2"
+  )
+
+  val fs2Kafka = Seq(
+    "org.typelevel"     %% "fs2-kafka"              % "4.1-078c324-SNAPSHOT",
+    "io.github.irevive" %% "fs2-kafka-otel4s-trace" % "0.2-7d1f650-SNAPSHOT"
   )
 
   val otel4s = Seq(
@@ -110,10 +116,9 @@ lazy val `weather-service` = project
     libraryDependencies ++= Seq(
       Libraries.catsCore,
       Libraries.catsEffect,
-      Libraries.kafka4s,
       Libraries.grpcNettyShaded,
       Libraries.logback
-    ) ++ Libraries.fs2 ++ Libraries.fs2Grpc ++ Libraries.otel4s ++ Libraries.sttp ++ Libraries.http4s ++ Libraries.openTelemetry
+    ) ++ Libraries.fs2 ++ Libraries.fs2Grpc ++ Libraries.fs2Kafka ++ Libraries.otel4s ++ Libraries.sttp ++ Libraries.http4s ++ Libraries.openTelemetry
   )
   .dependsOn(protobuf)
 
@@ -131,9 +136,8 @@ lazy val warehouse = project
     libraryDependencies ++= Seq(
       Libraries.catsCore,
       Libraries.catsEffect,
-      Libraries.kafka4s,
       Libraries.logback,
       Libraries.openTelemetryInstrumentationJdbc
-    ) ++ Libraries.fs2 ++ Libraries.otel4s ++ Libraries.doobie ++ Libraries.openTelemetry
+    ) ++ Libraries.fs2 ++ Libraries.fs2Kafka ++ Libraries.otel4s ++ Libraries.doobie ++ Libraries.openTelemetry
   )
   .dependsOn(protobuf)

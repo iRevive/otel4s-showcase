@@ -2,9 +2,11 @@ package otel.showcase.warehouse
 
 import cats.effect.{IO, IOApp, Resource}
 import fs2.kafka.*
+import fs2.kafka.KafkaConsumer.StreamOps
 import fs2.kafka.consumer.KafkaConsumeChunk.CommitNow
+import fs2.kafka.otel4s.trace.KafkaTracer
+import fs2.kafka.otel4s.trace.syntax.*
 import io.opentelemetry.instrumentation.api.incubator.semconv.db.{SqlDialect, SqlQueryAnalyzer}
-import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.slf4j.LoggerFactory
 import org.typelevel.doobie.Transactor
 import org.typelevel.doobie.implicits.*
@@ -45,12 +47,8 @@ object Server extends IOApp.Simple {
         .withAutoOffsetReset(AutoOffsetReset.Earliest)
         .withBootstrapServers("localhost:9092")
         .withGroupId("group")
-        .withProperty(
-          ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG,
-          classOf[TextMapPropagatorInterceptor].getName
-        )
 
-    def write(record: ConsumerRecord[String, Array[Byte]]): IO[Unit] = IO.defer {
+    def handleRecord(record: ConsumerRecord[String, Array[Byte]]): IO[Unit] = IO.defer {
       val message = WeatherRequestMessage.parseFrom(record.value)
 
       val insert =
@@ -64,15 +62,13 @@ object Server extends IOApp.Simple {
       insert.update.run.transact(transactor).void
     }
 
-    def handleRecord(record: ConsumerRecord[String, Array[Byte]])(using Tracer[IO]) =
-      Tracer[IO].joinOrRoot(record.headers)(write(record))
-
     for {
       given Tracer[IO] <- TracerProvider[IO].get("kafka")
       _ <- KafkaConsumer
         .stream(consumerSettings)
         .subscribeTo("warehouse.request")
-        .consumeChunk(chunk => chunk.traverse(record => handleRecord(record)).as(CommitNow))
+        .traced(KafkaTracer.Config.default)
+        .consumeChunkTraced(chunk => chunk.traverse(record => handleRecord(record)).as(CommitNow))
         .foreverM
     } yield ()
   }
