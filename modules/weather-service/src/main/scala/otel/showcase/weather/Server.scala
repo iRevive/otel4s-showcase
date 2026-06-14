@@ -4,7 +4,9 @@ import cats.effect.std.Dispatcher
 import cats.effect.{IO, IOApp, Resource}
 import fs2.grpc.otel4s.trace.TraceServiceAspect
 import fs2.grpc.syntax.all.*
+import fs2.kafka.otel4s.trace.KafkaTracer
 import fs2.kafka.{KafkaProducer, ProducerSettings}
+import fs2.kafka.otel4s.trace.syntax.*
 import io.grpc.{Server, ServerServiceDefinition}
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import org.typelevel.otel4s.context.LocalProvider
@@ -31,9 +33,11 @@ object Server extends IOApp.Simple {
 
       _ <- IORuntimeMetrics.register[IO](runtime.metrics, IORuntimeMetrics.Config.default)
 
-      kafkaProducer <- KafkaProducer.resource(
-        ProducerSettings[IO, String, Array[Byte]].withBootstrapServers("localhost:9092")
-      )
+      kafkaProducer <- KafkaProducer
+        .resource(
+          ProducerSettings[IO, String, Array[Byte]].withBootstrapServers("localhost:9092")
+        )
+        .evalMap(_.traced(KafkaTracer.Config.default))
 
       backend <- HttpClientCatsBackend.resource[IO]()
       metered <- Otel4sMetricsBackend(backend, Otel4sMetricsConfig.default)
