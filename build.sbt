@@ -7,54 +7,56 @@ ThisBuild / semanticdbEnabled := true
 
 lazy val Libraries = new {
   val catsCore   = "org.typelevel"   %% "cats-core"   % "2.13.0"
-  val catsEffect = "org.typelevel"   %% "cats-effect" % "3.6.3"
+  val catsEffect = "org.typelevel"   %% "cats-effect" % "3.7.0"
   val kafka4s    = "com.github.fd4s" %% "fs2-kafka"   % "3.9.1"
 
   val grpcNettyShaded = "io.grpc" % "grpc-netty-shaded" % scalapb.compiler.Version.grpcJavaVersion
 
   val fs2 = Seq(
-    "co.fs2" %% "fs2-core" % "3.12.2",
-    "co.fs2" %% "fs2-io"   % "3.12.2"
+    "co.fs2" %% "fs2-core" % "3.13.0",
+    "co.fs2" %% "fs2-io"   % "3.13.0"
   )
 
   val otel4s = Seq(
-    "org.typelevel" %% "otel4s-oteljava"                 % "0.15.0",
-    "org.typelevel" %% "otel4s-oteljava-context-storage" % "0.15.0",
-    "org.typelevel" %% "otel4s-semconv"                  % "0.15.0",
-    "org.typelevel" %% "otel4s-semconv-experimental"     % "0.15.0",
-    "org.typelevel" %% "otel4s-instrumentation-metrics"  % "0.15.0"
+    "org.typelevel" %% "otel4s-oteljava"                 % "1.0.0",
+    "org.typelevel" %% "otel4s-oteljava-context-storage" % "1.0.0",
+    "org.typelevel" %% "otel4s-semconv"                  % "1.0.0",
+    "org.typelevel" %% "otel4s-semconv-experimental"     % "1.0.0",
+    "org.typelevel" %% "otel4s-instrumentation-metrics"  % "1.0.0"
   )
 
   val doobie = Seq(
-    "org.tpolecat" %% "doobie-core"                   % "1.0-04cb209-20260227T192754Z-SNAPSHOT",
-    "org.tpolecat" %% "doobie-postgres"               % "1.0-04cb209-20260227T192754Z-SNAPSHOT",
-    "org.tpolecat" %% "doobie-otel4s"                 % "1.0-04cb209-20260227T192754Z-SNAPSHOT",
-    "org.tpolecat" %% "doobie-otel4s-instrumentation" % "1.0-04cb209-20260227T192754Z-SNAPSHOT"
+    "org.typelevel" %% "doobie-core"     % "1.0.0-RC13",
+    "org.typelevel" %% "doobie-postgres" % "1.0.0-RC13",
+    "org.typelevel" %% "doobie-otel4s"   % "1.0.0-RC13"
   )
 
   val http4s = Seq(
-    "org.http4s" %% "http4s-ember-server" % "0.23.33",
-    "org.http4s" %% "http4s-ember-client" % "0.23.33",
-    "org.http4s" %% "http4s-dsl"          % "0.23.33"
+    "org.http4s" %% "http4s-ember-server" % "0.23.34",
+    "org.http4s" %% "http4s-ember-client" % "0.23.34",
+    "org.http4s" %% "http4s-dsl"          % "0.23.34"
   )
 
   val sttp = Seq(
-    "com.softwaremill.sttp.client4" %% "core"                                 % "4.0.15",
-    "com.softwaremill.sttp.client4" %% "cats"                                 % "4.0.15",
-    "com.softwaremill.sttp.client4" %% "circe"                                % "4.0.15",
-    "com.softwaremill.sttp.client4" %% "opentelemetry-otel4s-metrics-backend" % "4.0.15",
-    "com.softwaremill.sttp.client4" %% "opentelemetry-otel4s-tracing-backend" % "4.0.15"
+    "com.softwaremill.sttp.client4" %% "core"                                 % "4.0.25",
+    "com.softwaremill.sttp.client4" %% "cats"                                 % "4.0.25",
+    "com.softwaremill.sttp.client4" %% "circe"                                % "4.0.25",
+    "com.softwaremill.sttp.client4" %% "opentelemetry-otel4s-metrics-backend" % "4.0.25",
+    "com.softwaremill.sttp.client4" %% "opentelemetry-otel4s-tracing-backend" % "4.0.25"
   )
 
   val logback = "ch.qos.logback" % "logback-classic" % "1.5.27"
 
   val openTelemetry = Seq(
-    "io.opentelemetry" % "opentelemetry-exporter-otlp"               % "1.58.0" % Runtime,
-    "io.opentelemetry" % "opentelemetry-sdk-extension-autoconfigure" % "1.58.0" % Runtime
+    "io.opentelemetry" % "opentelemetry-exporter-otlp"               % "1.63.0" % Runtime,
+    "io.opentelemetry" % "opentelemetry-sdk-extension-autoconfigure" % "1.63.0" % Runtime
   )
 
+  val openTelemetryInstrumentationJdbc =
+    "io.opentelemetry.instrumentation" % "opentelemetry-jdbc" % "2.28.1-alpha"
+
   val openTelemetryAgent =
-    "io.github.irevive" % "otel4s-opentelemetry-javaagent" % "2.24.0" % Runtime
+    "io.github.irevive" % "otel4s-opentelemetry-javaagent" % "2.28.1" % Runtime
 }
 
 lazy val root = project
@@ -120,14 +122,14 @@ lazy val warehouse = project
     run / fork  := true,
     javaOptions += "-Dotel.service.name=warehouse",
     javaOptions += "-Dcats.effect.trackFiberContext=true",
-    // javaAgents  += Libraries.openTelemetryAgent,
+    javaAgents  += Libraries.openTelemetryAgent,
     run / envVars += "OTEL_SEMCONV_STABILITY_OPT_IN" -> "database,code",
     libraryDependencies ++= Seq(
       Libraries.catsCore,
       Libraries.catsEffect,
       Libraries.kafka4s,
       Libraries.logback,
-      "io.opentelemetry.instrumentation" % "opentelemetry-jdbc" % "2.24.0-alpha"
+      Libraries.openTelemetryInstrumentationJdbc,
     ) ++ Libraries.fs2 ++ Libraries.otel4s ++ Libraries.doobie ++ Libraries.openTelemetry
   )
   .dependsOn(protobuf)

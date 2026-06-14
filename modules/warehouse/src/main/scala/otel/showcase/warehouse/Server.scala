@@ -1,24 +1,21 @@
 package otel.showcase.warehouse
 
-import javax.sql.DataSource
-
 import cats.effect.{IO, IOApp, Resource}
-import doobie.implicits.*
-import doobie.otel4s.*
-import doobie.{ExecutionContexts, Transactor}
 import fs2.kafka.*
 import fs2.kafka.consumer.KafkaConsumeChunk.CommitNow
-import io.opentelemetry.api.OpenTelemetry
-import io.opentelemetry.instrumentation.jdbc.datasource.JdbcTelemetry
+import io.opentelemetry.instrumentation.api.incubator.semconv.db.{SqlDialect, SqlQueryAnalyzer}
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.postgresql.ds.PGSimpleDataSource
 import org.slf4j.LoggerFactory
+import org.typelevel.doobie.Transactor
+import org.typelevel.doobie.implicits.*
+import org.typelevel.doobie.otel4s.{QueryAnalyzer, SpanNamer, TracedTransactor, TracingConfig}
 import org.typelevel.otel4s.context.LocalProvider
 import org.typelevel.otel4s.context.propagation.TextMapGetter
 import org.typelevel.otel4s.instrumentation.ce.IORuntimeMetrics
 import org.typelevel.otel4s.metrics.MeterProvider
 import org.typelevel.otel4s.oteljava.OtelJava
-import org.typelevel.otel4s.oteljava.context.{AskContext, Context}
+import org.typelevel.otel4s.oteljava.context.{Context, IOLocalContextStorage}
+import org.typelevel.otel4s.semconv.attributes.DbAttributes
 import org.typelevel.otel4s.trace.{Tracer, TracerProvider}
 import otel.showcase.kafka.WeatherRequestMessage
 
@@ -27,17 +24,16 @@ object Server extends IOApp.Simple {
   private val logger = LoggerFactory.getLogger(getClass)
 
   def run: IO[Unit] = {
-    // given LocalProvider[IO, Context] = IOLocalContextStorage.localProvider[IO]
+    given LocalProvider[IO, Context] = IOLocalContextStorage.localProvider[IO]
 
     for {
-      otel4s                   <- OtelJava.autoConfigured[IO]()
-      given AskContext[IO]     <- Resource.pure(otel4s.localContext)
+      otel4s                   <- Resource.eval(OtelJava.global[IO])
       given MeterProvider[IO]  <- Resource.pure(otel4s.meterProvider)
       given TracerProvider[IO] <- Resource.pure(otel4s.tracerProvider)
 
       _ <- IORuntimeMetrics.register[IO](runtime.metrics, IORuntimeMetrics.Config.default)
 
-      transactor <- createTransactor(otel4s.underlying)
+      transactor <- Resource.eval(createTransactor)
       _          <- Resource.eval(createTables(transactor))
       _          <- Resource.eval(startKafkaConsumer(transactor))
     } yield ()
@@ -81,25 +77,42 @@ object Server extends IOApp.Simple {
     } yield ()
   }
 
-  private def createTransactor(openTelemetry: OpenTelemetry)(using AskContext[IO]): Resource[IO, Transactor[IO]] =
-    ExecutionContexts.fixedThreadPool[IO](32).map { ec =>
-      val ds = new PGSimpleDataSource
-      ds.setUrl("jdbc:postgresql://localhost:5432/warehouse")
-      ds.setUser("user")
-      ds.setPassword("password")
-      val normal = Transactor.fromDataSource[IO](ds: DataSource, ec, None)
+  private def createTransactor(using TracerProvider[IO]): IO[Transactor[IO]] = {
+    val tx = Transactor.fromDriverManager[IO](
+      driver = "org.postgresql.Driver",
+      url = "jdbc:postgresql://localhost:5432/warehouse",
+      user = "user",
+      password = "password",
+      logHandler = None
+    )
 
-      val jdbcTelemetry = JdbcTelemetry
-        .builder(openTelemetry)
-        .setDataSourceInstrumenterEnabled(false)
-        .setStatementInstrumenterEnabled(true)
-        .setCaptureQueryParameters(true)
-        .setQuerySanitizationEnabled(true)
-        .setTransactionInstrumenterEnabled(false)
-        .build()
+    val queryAnalyzer: QueryAnalyzer =
+      new QueryAnalyzer {
+        private val delegate = SqlQueryAnalyzer.create(true)
+        private val dialect  = SqlDialect.DOUBLE_QUOTES_ARE_STRING_LITERALS
 
-      TracedJdbcTransactor.dataSource(jdbcTelemetry, normal, None)
-    }
+        def analyze(sql: String): Option[QueryAnalyzer.QueryMetadata] =
+          Option(delegate.analyzeWithSummary(sql, dialect)).map { q =>
+            QueryAnalyzer.QueryMetadata(
+              queryText = Option(q.getQueryText),
+              operationName = Option(q.getOperationName),
+              collectionName = Option(q.getCollectionName),
+              storedProcedureName = Option(q.getStoredProcedureName),
+              querySummary = Option(q.getQuerySummary)
+            )
+          }
+      }
+
+    val config = TracingConfig
+      .recommended(DbAttributes.DbSystemNameValue.Postgresql, "warehouse")
+      .withQueryAnalyzer(queryAnalyzer)
+      .withSpanNamer(
+        SpanNamer.fromQueryMetadata
+          .orElse(SpanNamer.fromAttribute(DbAttributes.DbQuerySummary))
+      )
+
+    TracedTransactor.create[IO](tx, config, None)
+  }
 
   private def createTables(tx: Transactor[IO]): IO[Unit] = {
     val ddl =
